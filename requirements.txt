@@ -1,0 +1,7 @@
+flask>=3.0
+opencv-python-headless>=4.8
+numpy>=1.24
+pillow>=10.0
+# EasyOCR kéo theo PyTorch. Nên cài torch bản CPU trước để nhẹ hơn:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+easyocr>=1.7

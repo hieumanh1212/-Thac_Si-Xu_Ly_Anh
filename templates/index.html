@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PlateVision · Nhận dạng biển số xe máy</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b5bf7'/%3E%3Crect x='6' y='9' width='20' height='14' rx='3' fill='none' stroke='white' stroke-width='2.2'/%3E%3Cpath d='M10 14h4M18 14h4M10 18h12' stroke='white' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="bg-glow" aria-hidden="true"></div>
+
+<!-- ============ Thanh điều hướng ============ -->
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none"><rect x="3" y="6" width="26" height="20" rx="4" stroke="currentColor" stroke-width="2.4"/><path d="M9 13h6M17 13h6M9 19h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </span>
+      <span>
+        <b>PlateVision</b>
+        <small>Nhận dạng biển số xe máy</small>
+      </span>
+    </a>
+    <div class="nav-actions">
+      <span id="status" class="pill pill-wait"><i class="dot"></i><span>Đang kiểm tra OCR</span></span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <!-- ============ Hero ============ -->
+  <section class="hero">
+    <span class="eyebrow">Bài tập lớn · Xử lý ảnh</span>
+    <h1>Nhận dạng biển số xe máy <span class="grad">bằng xử lý ảnh</span></h1>
+    <p>Định vị biển số bằng contour, nắn phối cảnh, phân đoạn ký tự bằng thành phần liên thông và nhận dạng bằng EasyOCR. Xem trực quan từng bước của thuật toán.</p>
+  </section>
+
+  <div class="workspace">
+    <!-- ============ Cột trái: đầu vào ============ -->
+    <section class="panel input-panel">
+      <div class="panel-head">
+        <h2><span class="step-no">1</span>Ảnh đầu vào</h2>
+        <div class="segmented" role="tablist">
+          <button class="seg active" data-tab="upload" role="tab">
+            <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>Tải ảnh
+          </button>
+          <button class="seg" data-tab="camera" role="tab">
+            <svg viewBox="0 0 24 24"><path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>Webcam
+          </button>
+        </div>
+      </div>
+
+      <div id="panel-upload">
+        <label id="dropzone" class="dropzone">
+          <input type="file" id="fileInput" accept="image/*" hidden>
+          <div id="dropHint" class="drop-hint">
+            <span class="drop-icon">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg>
+            </span>
+            <strong>Kéo thả ảnh vào đây</strong>
+            <span>hoặc <u>chọn từ máy</u> · dán bằng <kbd>Ctrl</kbd>+<kbd>V</kbd></span>
+            <small>JPG, PNG, WEBP · tối đa 16 MB</small>
+          </div>
+          <div id="previewWrap" class="preview-wrap" hidden>
+            <img id="preview" alt="Ảnh đã chọn">
+            <div class="scan" aria-hidden="true"></div>
+            <button id="btnClear" class="clear-btn" type="button" title="Bỏ ảnh">✕</button>
+          </div>
+        </label>
+      </div>
+
+      <div id="panel-camera" hidden>
+        <div class="camera-box">
+          <video id="video" autoplay playsinline muted></video>
+          <div class="cam-frame" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+          <div id="camPlaceholder" class="cam-placeholder">Camera đang tắt</div>
+          <canvas id="canvas" hidden></canvas>
+        </div>
+        <div class="btn-row">
+          <button id="btnCamStart" class="btn btn-ghost">Bật camera</button>
+          <button id="btnCapture" class="btn btn-ghost" disabled>Chụp &amp; nhận dạng</button>
+        </div>
+      </div>
+
+      <button id="btnRecognize" class="btn btn-primary btn-lg" disabled>
+        <span class="btn-label">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          Nhận dạng biển số
+        </span>
+        <span class="btn-spinner" aria-hidden="true"></span>
+      </button>
+
+      <div id="samplesBox" class="samples" hidden>
+        <div class="sub-head">
+          <h3>Ảnh mẫu</h3>
+          <span class="muted">Bấm để thử nhanh</span>
+        </div>
+        <div id="samples" class="sample-grid"></div>
+      </div>
+    </section>
+
+    <!-- ============ Cột phải: kết quả ============ -->
+    <section class="panel result-panel">
+      <div class="panel-head">
+        <h2><span class="step-no">2</span>Kết quả</h2>
+        <button id="btnCopy" class="btn btn-ghost btn-sm" hidden>
+          <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Sao chép
+        </button>
+      </div>
+
+      <div id="emptyState" class="empty">
+        <div class="empty-plate">
+          <div>29-X1</div><div>123.45</div>
+        </div>
+        <p>Chọn ảnh có biển số xe máy rồi bấm <b>Nhận dạng</b>.<br><span class="muted">Kết quả và các bước xử lý sẽ hiện ở đây.</span></p>
+      </div>
+
+      <div id="loading" class="loading" hidden>
+        <div class="sk sk-plate"></div>
+        <div class="sk-row"><div class="sk"></div><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>
+        <p class="muted">Đang phân tích ảnh…</p>
+      </div>
+
+      <div id="result" hidden>
+        <div class="result-hero">
+          <div class="plate-stage">
+            <div class="plate" id="plate">
+              <div class="plate-line" id="plateLine1">--</div>
+              <div class="plate-line" id="plateLine2">--</div>
+            </div>
+            <span id="validBadge" class="pill"></span>
+          </div>
+
+          <div class="conf">
+            <svg viewBox="0 0 120 120" class="ring">
+              <circle cx="60" cy="60" r="52" class="ring-bg"/>
+              <circle cx="60" cy="60" r="52" class="ring-fg" id="ringFg"/>
+            </svg>
+            <div class="conf-val"><b id="confVal">0</b><span>%</span></div>
+            <small>Độ tin cậy</small>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><span class="stat-label">Tổng thời gian</span><b id="sTime">–</b></div>
+          <div class="stat"><span class="stat-label">Ký tự tách được</span><b id="sChars">–</b></div>
+          <div class="stat"><span class="stat-label">Ứng viên vùng biển</span><b id="sCands">–</b></div>
+          <div class="stat"><span class="stat-label">Chuỗi OCR thô</span><b id="sRaw" class="mono">–</b></div>
+        </div>
+
+        <div class="timing">
+          <div class="timing-bar"><span id="tDetect"></span><span id="tOcr"></span></div>
+          <div class="timing-legend">
+            <span><i class="lg lg-a"></i>Xử lý ảnh <b id="tDetectMs"></b></span>
+            <span><i class="lg lg-b"></i>OCR <b id="tOcrMs"></b></span>
+          </div>
+        </div>
+
+        <div class="figures">
+          <figure class="fig-main">
+            <img id="imgDetected" alt="Vị trí biển số" data-zoom>
+            <figcaption>Vị trí biển số trên ảnh</figcaption>
+          </figure>
+          <div class="fig-side">
+            <figure>
+              <img id="imgPlate" alt="Biển số sau khi nắn" data-zoom>
+              <figcaption>Sau nắn phối cảnh</figcaption>
+            </figure>
+            <figure>
+              <img id="imgChars" class="chars" alt="Ký tự sau phân đoạn" data-zoom>
+              <figcaption>Ký tự sau phân đoạn</figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ Pipeline ============ -->
+  <section id="pipeline" class="panel pipeline" hidden>
+    <div class="panel-head">
+      <h2><span class="step-no">3</span>Các bước xử lý ảnh</h2>
+      <span class="muted kbd-hint">Dùng phím <kbd>←</kbd> <kbd>→</kbd> để chuyển bước</span>
+    </div>
+    <div class="viewer">
+      <div class="viewer-stage">
+        <button class="nav-arrow left" id="stepPrev" aria-label="Bước trước">‹</button>
+        <img id="stepImg" alt="" data-zoom>
+        <button class="nav-arrow right" id="stepNext" aria-label="Bước sau">›</button>
+      </div>
+      <div class="viewer-info">
+        <span class="step-count" id="stepCount"></span>
+        <h3 id="stepTitle"></h3>
+        <p id="stepDesc"></p>
+        <div class="progress"><span id="stepProgress"></span></div>
+      </div>
+    </div>
+    <div id="thumbs" class="thumbs"></div>
+  </section>
+
+  <!-- ============ Lịch sử ============ -->
+  <section id="historyBox" class="panel history" hidden>
+    <div class="panel-head">
+      <h2>Lịch sử nhận dạng</h2>
+      <button id="btnClearHistory" class="btn btn-ghost btn-sm">Xoá lịch sử</button>
+    </div>
+    <div id="historyList" class="history-grid"></div>
+  </section>
+
+  <footer class="footer">
+    OpenCV · EasyOCR · Flask: Bài tập lớn môn Xử lý ảnh, chương trình Thạc sĩ CNTT
+  </footer>
+</main>
+
+<div id="lightbox" class="lightbox" hidden>
+  <img id="lightboxImg" alt="">
+  <p id="lightboxCaption"></p>
+</div>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+# Môi trường ảo Python
+.venv/
+venv/
+env/
+
+# File biên dịch / cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Kết quả đánh giá
+*.csv
+
+# Hệ điều hành / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
