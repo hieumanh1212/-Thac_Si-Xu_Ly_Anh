@@ -189,13 +189,24 @@
     const r = $("result"); r.style.animation = "none"; void r.offsetWidth; r.style.animation = "";
     const p = $("plate"); p.style.animation = "none"; void p.offsetWidth; p.style.animation = "";
 
-    $("plateLine1").textContent = d.found ? d.line1 || "?" : "--";
+    const isCar = d.vehicle === "car";
+    const oneRow = d.layout === "one_row";
+    // Biển ô tô dài: vẽ 1 dòng "51G-123.45"; biển 2 dòng (xe máy / ô tô vuông): 2 dòng
+    $("plateLine1").textContent = !d.found ? "--" : oneRow ? d.text : d.line1 || "?";
     $("plateLine2").textContent = d.found ? d.line2 || "?" : "--";
+    $("plateLine2").hidden = oneRow;
+    p.classList.toggle("long", oneRow);
     p.classList.toggle("invalid", !d.valid);
 
     const vb = $("validBadge");
-    vb.className = "pill " + (d.valid ? "valid" : "invalid");
-    vb.innerHTML = `<i class="dot"></i>${d.valid ? "Đúng định dạng biển số VN" : d.found ? "Chưa khớp định dạng" : "Không tìm thấy biển số"}`;
+    vb.className = "pill " + (isCar ? "car" : d.valid ? "valid" : "invalid");
+    vb.innerHTML = `<i class="dot"></i>${
+      isCar ? (oneRow ? "Biển ô tô" : "Có thể là biển ô tô")
+      : d.valid ? "Đúng định dạng biển số xe máy"
+      : d.found ? "Chưa khớp định dạng" : "Không tìm thấy biển số"}`;
+
+    $("warning").hidden = !d.warning;
+    $("warningText").textContent = d.warning || "";
 
     const conf = d.found ? d.confidence * 100 : 0;
     animateNumber($("confVal"), conf);
@@ -306,7 +317,9 @@
       b.querySelector("img").src = h.plate_image;
       b.querySelector(".h-text").textContent = h.found ? h.text || "?" : "Không tìm thấy";
       b.querySelector(".d").style.background = h.valid ? "var(--ok)" : "var(--warn)";
-      b.querySelector(".h-meta span").textContent = `${Math.round(h.time_ms.total)} ms · ${(h.confidence * 100).toFixed(0)}%`;
+      b.querySelector(".h-meta span").textContent =
+        `${h.vehicle === "car" ? "Ô tô · " : ""}${Math.round(h.time_ms.total)} ms · ${(h.confidence * 100).toFixed(0)}%`;
+      if (h.vehicle === "car") b.querySelector(".d").style.background = "var(--warn)";
       b.addEventListener("click", () => { render(h); window.scrollTo({ top: 0, behavior: "smooth" }); });
       box.appendChild(b);
     });

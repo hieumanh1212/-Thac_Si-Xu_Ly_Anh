@@ -30,6 +30,35 @@ def binarize_plate(plate_bgr):
     return gray, binary, inverted
 
 
+# Kích thước chuẩn hoá biển ô tô dài 1 dòng (520 x 110 mm)
+LONG_W, LONG_H = 520, 110
+
+
+def segment_single_row(binary):
+    """Phân đoạn ký tự trên biển ô tô dài 1 dòng. Trả về [row] hoặc [] (row sắp theo x)."""
+    H, W = binary.shape[:2]
+    n, _, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    boxes = []
+    for i in range(1, n):
+        x, y, w, h, area = (int(v) for v in stats[i])
+        if not (0.40 * H <= h <= 0.95 * H):   # ký tự chiếm phần lớn chiều cao biển dài
+            continue
+        if not (0.15 <= w / float(h) <= 1.0) or w > 0.14 * W:
+            continue
+        if not (0.15 <= area / float(w * h) <= 0.95):
+            continue
+        if y <= 1 or y + h >= H - 1:         # chạm mép trên/dưới -> viền
+            continue
+        boxes.append((x, y, w, h))
+    if len(boxes) < 2:
+        return []
+    # Giữ các ký tự cao đều nhau (loại dấu '-', '.', ốc vít, logo)
+    med_h = float(np.median([b[3] for b in boxes]))
+    row = sorted((b for b in boxes if 0.75 * med_h <= b[3] <= 1.25 * med_h), key=lambda b: b[0])
+    row = _remove_nested(row)
+    return [row] if row else []
+
+
 def segment_characters(binary):
     """Tìm hộp bao các ký tự. Trả về list các dòng, mỗi dòng là list (x, y, w, h) đã sắp theo x."""
     H, W = binary.shape[:2]

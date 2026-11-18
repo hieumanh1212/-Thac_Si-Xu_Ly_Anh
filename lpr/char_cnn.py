@@ -52,8 +52,16 @@ def build_model():
     )
 
 
-def allowed_classes(line, pos):
-    """Tập lớp hợp lệ theo vị trí. Dòng trên: [số][số][chữ][số|chữ]..., dòng dưới: toàn số."""
+def allowed_classes(line, pos, single_row=False):
+    """Tập lớp hợp lệ theo vị trí.
+
+    Biển 2 dòng (xe máy, ô tô vuông): dòng trên [số][số][chữ][số|chữ]..., dòng dưới toàn số.
+    Biển 1 dòng (ô tô dài, vd. 51G12345): [số][số][chữ][chữ|số] rồi toàn số.
+    """
+    if single_row:
+        if pos in (0, 1) or pos >= 4:
+            return DIGITS_IDX
+        return LETTERS_IDX if pos == 2 else ALNUM_IDX
     if line == 1 or pos in (0, 1):
         return DIGITS_IDX
     if pos == 2:
@@ -88,7 +96,11 @@ class CharClassifier:
         return self._model
 
     def read_rows(self, gray_plate, rows, pad=2):
-        """Phân loại các ký tự của biển 2 dòng. Trả về ([dòng 1, dòng 2], độ tin cậy) hoặc (None, 0)."""
+        """Phân loại ký tự của biển 2 dòng hoặc 1 dòng (ô tô dài).
+
+        Trả về (list chuỗi theo từng dòng, độ tin cậy) hoặc (None, 0) nếu chưa có mô hình.
+        """
+        single = len(rows) == 1
         model = self.load()
         if model is None:
             return None, 0.0
@@ -104,9 +116,9 @@ class CharClassifier:
         with torch.no_grad():
             probs = torch.softmax(model(torch.from_numpy(np.stack(crops)[:, None])), dim=1).numpy()
 
-        texts, confs = ["", ""], []
+        texts, confs = ["" for _ in rows], []
         for (li, pi), p in zip(meta, probs):
-            allowed = allowed_classes(li, pi)
+            allowed = allowed_classes(li, pi, single_row=single)
             k = allowed[int(np.argmax(p[allowed]))]
             texts[li] += CLASSES[k]
             confs.append(float(p[k]))

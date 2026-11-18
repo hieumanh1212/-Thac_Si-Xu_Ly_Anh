@@ -276,6 +276,20 @@ kbd {
 .plate::after { right: 12px; }
 .plate-line { font-size: 54px; line-height: 1.12; letter-spacing: 3px; }
 .plate.invalid { border-color: var(--warn); }
+/* Biển ô tô dài 1 dòng (520 x 110 mm) */
+.plate.long { padding: 14px 30px; min-width: 0; }
+.plate.long .plate-line { font-size: 46px; letter-spacing: 2px; white-space: nowrap; }
+
+/* Thanh cảnh báo (vd. ảnh là biển ô tô) */
+.warning {
+  display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; padding: 12px 16px;
+  border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  animation: rise .35s cubic-bezier(.2,.8,.2,1);
+}
+.warning svg { width: 22px; height: 22px; color: var(--warn); margin-top: 1px; }
+.warning b { display: block; color: var(--warn); font-size: 14px; }
+.warning span { font-size: 13.5px; color: var(--text-2); }
 @keyframes pop { from { opacity: 0; transform: scale(.85) rotate(-2deg); } }
 
 .conf { position: relative; width: 132px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
@@ -322,6 +336,7 @@ figcaption { font-size: 12.5px; color: var(--muted); margin-top: 6px; font-weigh
 .result-panel .pill { font-size: 12px; }
 .pill.valid { background: var(--ok-soft); color: var(--ok); }
 .pill.invalid { background: var(--warn-soft); color: var(--warn); }
+.pill.car { background: var(--warn-soft); color: var(--warn); }
 
 /* ---------- Pipeline viewer ---------- */
 .pipeline { margin-top: 22px; animation: rise .45s cubic-bezier(.2,.8,.2,1); }
@@ -432,6 +447,8 @@ figcaption { font-size: 12.5px; color: var(--muted); margin-top: 6px; font-weigh
   .result-hero { padding: 18px; justify-content: center; }
   .plate-stage { align-items: center; }
   .plate-line { font-size: 42px; }
+  .plate.long { padding: 10px 16px; }
+  .plate.long .plate-line { font-size: 30px; }
   .sample-grid { grid-template-columns: repeat(3, 1fr); }
   #status span:last-child { display: none; }
 }

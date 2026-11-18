@@ -16,7 +16,7 @@ MIN_AREA_RATIO, MAX_AREA_RATIO = 0.002, 0.85
 MIN_FILL = 0.55  # diện tích contour / diện tích hình chữ nhật bao nhỏ nhất
 
 
-def _candidates_from_mask(mask, source):
+def _candidates_from_mask(mask, source, aspect_range=(MIN_ASPECT, MAX_ASPECT)):
     h, w = mask.shape[:2]
     img_area = float(h * w)
     contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
@@ -47,7 +47,7 @@ def _candidates_from_mask(mask, source):
         if qh < 10 or qw < 10:
             continue
         aspect = qw / qh
-        if not (MIN_ASPECT <= aspect <= MAX_ASPECT):
+        if not (aspect_range[0] <= aspect <= aspect_range[1]):
             continue
 
         x, y, bw, bh = cv2.boundingRect(quad.astype(np.int32))
@@ -82,4 +82,27 @@ def find_plate_candidates(img_bgr, pre, max_candidates=25):
         "quad": full, "bbox": (0, 0, w, h), "area": float(w * h),
         "aspect": w / float(h), "fill": 1.0, "source": "full",
     })
+    return unique
+
+
+# Biển ô tô dài 1 dòng: 520 x 110 mm -> tỉ lệ ~4.7 (chấp nhận 2.8 - 6.5 vì phối cảnh / viền)
+LONG_ASPECT = (2.8, 6.5)
+
+
+def find_long_plate_candidates(img_bgr, pre, max_candidates=15):
+    """Ứng viên biển ô tô dài 1 dòng (dùng để nhận biết và cảnh báo ảnh biển ô tô)."""
+    h, w = img_bgr.shape[:2]
+    cands = (_candidates_from_mask(pre["closed"], "long", LONG_ASPECT)
+             + _candidates_from_mask(pre["bright"], "long", LONG_ASPECT))
+    cands.sort(key=lambda c: c["fill"], reverse=True)
+    unique = []
+    for c in cands:
+        if all(box_iou(c["bbox"], u["bbox"]) < 0.85 for u in unique):
+            unique.append(c)
+    unique = unique[:max_candidates]
+    # Ảnh tải lên đã cắt sẵn biển dài
+    if LONG_ASPECT[0] <= w / float(h) <= LONG_ASPECT[1]:
+        full = order_points(np.array([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]], dtype="float32"))
+        unique.append({"quad": full, "bbox": (0, 0, w, h), "area": float(w * h),
+                       "aspect": w / float(h), "fill": 1.0, "source": "long"})
     return unique
