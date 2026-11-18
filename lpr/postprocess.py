@@ -11,7 +11,7 @@ phải là số, vị trí nào phải là chữ nên ta sửa lỗi theo vị t
 import re
 
 DIGITS = "0123456789"
-LETTERS = "ABCDEFGHKLMNPSTUVXYZ"  # chữ cái dùng trên biển số VN (không có I, J, O, Q, R, W)
+LETTERS = "ABCDEFGHKLMNPRSTUVXYZ"  # chữ cái dùng trên biển số VN (không có I, J, O, Q, W)
 
 TO_DIGIT = {"O": "0", "Q": "0", "D": "0", "U": "0", "C": "0", "I": "1", "J": "1", "L": "1",
             "T": "1", "Z": "2", "S": "5", "B": "8", "G": "6", "A": "4"}

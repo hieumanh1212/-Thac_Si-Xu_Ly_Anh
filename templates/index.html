@@ -101,6 +101,17 @@
         </div>
         <div id="samples" class="sample-grid"></div>
       </div>
+
+      <!-- Lịch sử: tự giãn lấp đầy phần còn lại của cột, cuộn khi nhiều mục -->
+      <div id="historyBox" class="history" hidden>
+        <div class="sub-head">
+          <h3>Lịch sử nhận dạng</h3>
+          <button id="btnClearHistory" class="link-btn" type="button">Xoá</button>
+        </div>
+        <div class="history-scroll">
+          <div id="historyList" class="history-list"></div>
+        </div>
+      </div>
     </section>
 
     <!-- ============ Cột phải: kết quả ============ -->
@@ -148,7 +159,7 @@
         <div class="stats">
           <div class="stat"><span class="stat-label">Tổng thời gian</span><b id="sTime">–</b></div>
           <div class="stat"><span class="stat-label">Ký tự tách được</span><b id="sChars">–</b></div>
-          <div class="stat"><span class="stat-label">Ứng viên vùng biển</span><b id="sCands">–</b></div>
+          <div class="stat"><span class="stat-label">Bộ nhận dạng</span><b id="sEngine">–</b></div>
           <div class="stat"><span class="stat-label">Chuỗi OCR thô</span><b id="sRaw" class="mono">–</b></div>
         </div>
 
@@ -202,14 +213,6 @@
     <div id="thumbs" class="thumbs"></div>
   </section>
 
-  <!-- ============ Lịch sử ============ -->
-  <section id="historyBox" class="panel history" hidden>
-    <div class="panel-head">
-      <h2>Lịch sử nhận dạng</h2>
-      <button id="btnClearHistory" class="btn btn-ghost btn-sm">Xoá lịch sử</button>
-    </div>
-    <div id="historyList" class="history-grid"></div>
-  </section>
 
   <footer class="footer">
     OpenCV · EasyOCR · Flask: Bài tập lớn môn Xử lý ảnh, chương trình Thạc sĩ CNTT

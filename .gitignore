@@ -8,8 +8,12 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Kết quả đánh giá
+# Bộ dữ liệu tải về (lớn, tải lại bằng hướng dẫn trong README)
+datasets/
+
+# Kết quả đánh giá (trừ file nhãn kiểm tra)
 *.csv
+!tools/test_labels.csv
 
 # Hệ điều hành / IDE
 .DS_Store

@@ -32,6 +32,26 @@ python tools/evaluate.py samples --csv ket_qua.csv     # đo độ chính xác
 
 Để đánh giá trên ảnh thật, đặt tên file theo nhãn: `59X1_12345.jpg`, `29B1_1234.jpg`, ...
 
+## CNN nhận dạng ký tự (train riêng cho font biển số VN)
+
+EasyOCR là mô hình đa dụng nên hay nhầm với font chữ hẹp của biển số Việt Nam (V↔1, 7↔1, M→D).
+Dự án kèm sẵn mô hình đã train `models/char_cnn.pt`. Khi phân đoạn tách được đủ 2 dòng ký tự,
+mỗi ký tự được phân loại bằng CNN (có ràng buộc vị trí: 2 ký tự đầu là số, ký tự thứ 3 là chữ cái,
+dòng 2 toàn số). Các trường hợp còn lại dùng EasyOCR.
+
+Train lại từ đầu (dữ liệu: [Vietnamese License Plate dataset](https://github.com/winter2897/Real-time-Auto-License-Plate-Recognition-with-Jetson-Nano/blob/main/doc/dataset.md)):
+
+1. Tải "Vietnamese License Plate Recognition (YOLO)", giải nén vào `datasets/raw_rec/`
+2. `python tools/prepare_char_dataset.py` – cắt ~25.000 ký tự, loại biển trùng tập kiểm tra
+3. `python tools/train_char_cnn.py` – train trên CPU khoảng 10–15 phút
+
+Đánh giá trên 58 ảnh xe máy thật đã gán nhãn chữ (`tools/test_labels.csv`; ảnh lấy từ bộ
+"Vietnamese License Plate Detection (YOLO)", giải nén vào `datasets/raw_det/`):
+
+```powershell
+python tools/eval_real.py --show-errors
+```
+
 ## Pipeline xử lý
 
 | Bước | Kỹ thuật | Module |
@@ -41,7 +61,7 @@ python tools/evaluate.py samples --csv ket_qua.csv     # đo độ chính xác
 | 3. Nắn phối cảnh | Perspective transform về 380×280 | `lpr/utils.py` |
 | 4. Nhị phân hoá và phân đoạn | Adaptive threshold → connected components → lọc kích thước → tách 2 dòng theo y | `lpr/segment.py` |
 | 5. Chọn ứng viên | Chấm điểm mỗi ứng viên theo cấu trúc ký tự (2 dòng, 3–5 + 4–5 ký tự) | `lpr/segment.py` |
-| 6. Nhận dạng ký tự | EasyOCR (CRNN) trên từng dòng; dòng 2 chỉ cho phép chữ số | `lpr/recognize.py` |
+| 6. Nhận dạng ký tự | CNN phân loại từng ký tự (ràng buộc vị trí); dự phòng EasyOCR (CRNN) trên từng dòng | `lpr/char_cnn.py`, `lpr/recognize.py` |
 | 7. Hậu xử lý | Sửa nhầm lẫn chữ/số theo vị trí (O→0, B→8, ...), định dạng `59-X1 123.45` | `lpr/postprocess.py` |
 
 ## Cấu trúc thư mục

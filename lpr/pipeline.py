@@ -5,6 +5,7 @@ import time
 import cv2
 import numpy as np
 
+from .char_cnn import CharClassifier
 from .detect import find_plate_candidates
 from .postprocess import is_valid, normalize_line1, normalize_line2, split_single_line
 from .preprocess import preprocess
@@ -19,12 +20,15 @@ WORK_WIDTH = 800  # chuẩn hoá chiều rộng ảnh trước khi xử lý
 class LicensePlateRecognizer:
     def __init__(self, gpu=False):
         self.ocr = OCREngine(gpu=gpu)
+        self.chars = CharClassifier()
 
     def warmup(self):
+        self.chars.load()
         self.ocr.load()
 
     def status(self):
-        return {"ocr_ready": self.ocr.ready, "ocr_loading": self.ocr.loading, "ocr_error": self.ocr.error}
+        return {"ocr_ready": self.ocr.ready, "ocr_loading": self.ocr.loading, "ocr_error": self.ocr.error,
+                "cnn_available": self.chars.available}
 
     # ------------------------------------------------------------------
     def _evaluate(self, img, cand):
@@ -35,7 +39,8 @@ class LicensePlateRecognizer:
                     score=score_candidate(rows, cand["aspect"], cand["source"]))
         return cand
 
-    def run(self, img_bgr, with_steps=True):
+    def run(self, img_bgr, with_steps=True, ocr="auto"):
+        """ocr: 'auto' (CNN ký tự nếu có mô hình, ngược lại EasyOCR) | 'cnn' | 'easyocr'."""
         t0 = time.perf_counter()
         img = resize_to_width(img_bgr, WORK_WIDTH)
         pre = preprocess(img)
@@ -53,7 +58,20 @@ class LicensePlateRecognizer:
         regions = line_regions(best["rows"], best["gray"].shape)
         best["ocr_input"] = mask_non_characters(best["gray"], best["rows"])
         best["ocr_lines"] = []
-        if found:
+        engine = "-"
+        rows = best["rows"]
+        # CNN chỉ dùng khi phân đoạn ra đúng cấu trúc biển xe máy: 2 dòng, 3-5 và 4-5 ký tự
+        use_cnn = (ocr in ("auto", "cnn") and found and self.chars.available and len(rows) == 2
+                   and 3 <= len(rows[0]) <= 5 and 4 <= len(rows[1]) <= 5)
+        if use_cnn:
+            texts, conf = self.chars.read_rows(best["gray"], rows)
+            if texts is not None:
+                raw1, raw2 = texts
+                conf1 = conf2 = conf
+                engine = "CNN"
+                best["ocr_lines"] = [compose_line(best["gray"], r) for r in rows]
+        if found and engine == "-":
+            engine = "EasyOCR"
             if len(best["rows"]) == 2:
                 # Ghép lại ký tự đã phân đoạn của từng dòng (cách đều, bỏ dấu '-' '.')
                 lines = [compose_line(best["gray"], r) for r in best["rows"]]
@@ -80,6 +98,7 @@ class LicensePlateRecognizer:
             "num_chars": n_chars,
             "num_candidates": len(cands),
             "source": best["source"],
+            "ocr_engine": engine,
             "time_ms": {
                 "detect_segment": round((t_detect - t0) * 1000, 1),
                 "ocr": round((t_end - t_detect) * 1000, 1),

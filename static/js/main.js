@@ -205,7 +205,10 @@
 
     $("sTime").textContent = `${Math.round(d.time_ms.total)} ms`;
     $("sChars").textContent = d.num_chars;
-    $("sCands").textContent = d.num_candidates;
+    $("sEngine").textContent = d.ocr_engine === "CNN" ? "CNN (font biển VN)" : d.ocr_engine;
+    $("sEngine").title = d.ocr_engine === "CNN"
+      ? "Mạng CNN train riêng cho ký tự biển số Việt Nam"
+      : "EasyOCR (dùng khi không tách đủ 2 dòng ký tự)";
     $("sRaw").textContent = d.raw.filter(Boolean).join(" · ") || "–";
 
     const total = d.time_ms.detect_segment + d.time_ms.ocr || 1;
