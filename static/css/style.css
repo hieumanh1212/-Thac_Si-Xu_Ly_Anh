@@ -259,6 +259,7 @@ kbd {
     var(--surface-2);
 }
 .plate-stage { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+.plate-badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* Biển số mô phỏng biển xe máy Việt Nam */
 .plate {
@@ -302,7 +303,9 @@ kbd {
 .conf-val span { font-size: 14px; color: var(--muted); font-weight: 600; }
 .conf small { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; }
 
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+.stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 16px; }
+@media (max-width: 900px) { .stats { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 600px) { .stats { grid-template-columns: repeat(2, 1fr); } }
 .stat {
   padding: 14px 16px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border);
   display: flex; flex-direction: column; gap: 4px; min-width: 0;
@@ -337,6 +340,26 @@ figcaption { font-size: 12.5px; color: var(--muted); margin-top: 6px; font-weigh
 .pill.valid { background: var(--ok-soft); color: var(--ok); }
 .pill.invalid { background: var(--warn-soft); color: var(--warn); }
 .pill.car { background: var(--warn-soft); color: var(--warn); }
+.pill-province {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.pill-province svg { color: var(--accent); display: inline-block; vertical-align: middle; }
+.province-val { color: var(--accent); font-weight: 700; }
+.pill-prov {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+  margin: 0 4px;
+}
 
 /* ---------- Pipeline viewer ---------- */
 .pipeline { margin-top: 22px; animation: rise .45s cubic-bezier(.2,.8,.2,1); }
@@ -451,6 +474,89 @@ figcaption { font-size: 12.5px; color: var(--muted); margin-top: 6px; font-weigh
   .plate.long .plate-line { font-size: 30px; }
   .sample-grid { grid-template-columns: repeat(3, 1fr); }
   #status span:last-child { display: none; }
+}
+
+/* ============ Đa biển số (Multi-plates) ============ */
+.multi-plates-box {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  background: var(--card-bg, #1a1b26);
+  border: 1px solid var(--border-hl, #3f4262);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.multi-plates-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.multi-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #38ef7d;
+  background: rgba(56, 239, 125, 0.12);
+  padding: 4px 10px;
+  border-radius: 99px;
+  border: 1px solid rgba(56, 239, 125, 0.3);
+}
+.multi-badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38ef7d;
+  box-shadow: 0 0 8px #38ef7d;
+}
+.multi-plates-list {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.multi-plate-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+.multi-plate-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+.multi-plate-pill.active {
+  background: rgba(91, 91, 247, 0.25);
+  border-color: #5b5bf7;
+  color: #fff;
+  box-shadow: 0 0 12px rgba(91, 91, 247, 0.35);
+}
+.multi-plate-pill b {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+}
+.multi-plate-pill .pill-tag {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #a0a5b8;
+}
+.multi-plate-pill.active .pill-tag {
+  background: rgba(91, 91, 247, 0.4);
+  color: #e0e4ff;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=3">
 </head>
 <body>
 <div class="bg-glow" aria-hidden="true"></div>
@@ -137,6 +137,15 @@
       </div>
 
       <div id="result" hidden>
+        <!-- Danh sách đa biển số (khi ảnh có từ 2 biển số trở lên) -->
+        <div id="multiPlatesBox" class="multi-plates-box" hidden>
+          <div class="multi-plates-header">
+            <span class="multi-badge"><i class="dot"></i><span id="multiPlatesCount">Phát hiện nhiều biển số</span></span>
+            <small class="muted">Bấm vào từng biển để xem chi tiết bên dưới</small>
+          </div>
+          <div id="multiPlatesList" class="multi-plates-list"></div>
+        </div>
+
         <div id="warning" class="warning" role="alert" hidden>
           <svg viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
           <div><b>Cảnh báo</b><span id="warningText"></span></div>
@@ -147,7 +156,13 @@
               <div class="plate-line" id="plateLine1">--</div>
               <div class="plate-line" id="plateLine2">--</div>
             </div>
-            <span id="validBadge" class="pill"></span>
+            <div class="plate-badges">
+              <span id="validBadge" class="pill"></span>
+              <span id="provinceBadge" class="pill pill-province" hidden>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                <span id="provinceText">–</span>
+              </span>
+            </div>
           </div>
 
           <div class="conf">
@@ -161,6 +176,7 @@
         </div>
 
         <div class="stats">
+          <div class="stat"><span class="stat-label">Tỉnh / Thành phố</span><b id="sProvince" class="province-val">–</b></div>
           <div class="stat"><span class="stat-label">Tổng thời gian</span><b id="sTime">–</b></div>
           <div class="stat"><span class="stat-label">Ký tự tách được</span><b id="sChars">–</b></div>
           <div class="stat"><span class="stat-label">Bộ nhận dạng</span><b id="sEngine">–</b></div>
@@ -229,6 +245,6 @@
 </div>
 <div id="toasts" class="toasts" aria-live="polite"></div>
 
-<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}?v=3"></script>
 </body>
 </html>

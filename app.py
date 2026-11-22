@@ -17,6 +17,7 @@ IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0  # Không cache static file để cập nhật UI ngay lập tức
 
 recognizer = LicensePlateRecognizer(gpu=False)
 # Nạp mô hình EasyOCR ở luồng nền để không chặn lúc khởi động
@@ -39,6 +40,9 @@ def list_samples():
     if not SAMPLES_DIR.is_dir():
         return jsonify([])
     files = sorted(p.name for p in SAMPLES_DIR.iterdir() if p.suffix.lower() in IMG_EXTS)
+    if "29D2_39999_double.jpg" in files:
+        files.remove("29D2_39999_double.jpg")
+        files.insert(0, "29D2_39999_double.jpg")
     return jsonify(files[:24])
 
 
@@ -85,4 +89,4 @@ def too_large(_):
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False)

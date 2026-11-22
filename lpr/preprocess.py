@@ -30,6 +30,10 @@ def preprocess(img_bgr):
     _, bright = cv2.threshold(cv2.GaussianBlur(clahe, (5, 5), 0), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     bright = cv2.morphologyEx(bright, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)))
 
+    # Ngưỡng thích nghi cục bộ: phát hiện biển số trong bóng râm hoặc chênh sáng phức tạp
+    adapt = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 51, -10)
+    adapt = cv2.morphologyEx(adapt, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+
     return {
         "gray": gray,
         "clahe": clahe,
@@ -37,4 +41,5 @@ def preprocess(img_bgr):
         "edges": edges,
         "closed": closed,
         "bright": bright,
+        "adapt": adapt,
     }

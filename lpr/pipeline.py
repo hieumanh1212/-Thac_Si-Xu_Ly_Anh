@@ -7,7 +7,7 @@ import numpy as np
 
 from .char_cnn import CharClassifier
 from .detect import find_long_plate_candidates, find_plate_candidates
-from .postprocess import (is_valid, is_valid_car, looks_like_car_series, normalize_car_series,
+from .postprocess import (get_province, is_valid, is_valid_car, looks_like_car_series, normalize_car_series,
                           normalize_line1, normalize_line2, split_car_long, split_single_line)
 from .preprocess import preprocess
 from .recognize import LINE1_ALLOW, LINE2_ALLOW, OCREngine, line_regions
@@ -51,13 +51,23 @@ class LicensePlateRecognizer:
         return {"ocr_ready": self.ocr.ready, "ocr_loading": self.ocr.loading, "ocr_error": self.ocr.error,
                 "cnn_available": self.chars.available}
 
+    def _is_taillight(self, plate_bgr):
+        """Kiểm tra và loại trừ đèn hậu / đèn phản quang màu đỏ."""
+        hsv = cv2.cvtColor(plate_bgr, cv2.COLOR_BGR2HSV)
+        red1 = cv2.inRange(hsv, (0, 70, 50), (12, 255, 255))
+        red2 = cv2.inRange(hsv, (168, 70, 50), (180, 255, 255))
+        red_ratio = (np.count_nonzero(red1) + np.count_nonzero(red2)) / float(plate_bgr.shape[0] * plate_bgr.shape[1])
+        return red_ratio > 0.10
+
     # ------------------------------------------------------------------
     def _evaluate(self, img, cand):
         plate = warp_quad(img, cand["quad"], (PLATE_W, PLATE_H))
         gray, binary, inverted = binarize_plate(plate)
         rows = segment_characters(binary)
-        cand.update(plate=plate, gray=gray, binary=binary, inverted=inverted, rows=rows,
-                    score=score_candidate(rows, cand["aspect"], cand["source"]))
+        score = score_candidate(rows, cand["aspect"], cand["source"])
+        if self._is_taillight(plate):
+            score -= 10.0  # Khử triệt để đèn hậu màu đỏ
+        cand.update(plate=plate, gray=gray, binary=binary, inverted=inverted, rows=rows, score=score)
         return cand
 
     def _evaluate_long(self, img, cand):
@@ -78,148 +88,235 @@ class LicensePlateRecognizer:
         cand.update(plate=plate, gray=gray, binary=binary, inverted=inverted, rows=rows, score=score)
         return cand
 
+    def _recognize_single_cand(self, c, ocr="auto"):
+        """Nhận dạng ký tự và hậu xử lý cho 1 ứng viên biển số."""
+        is_long = c.get("is_long", False)
+        rows = c.get("rows", [])
+        n_chars = sum(len(r) for r in rows)
+        found = n_chars >= 4
+        regions = line_regions(rows, c["gray"].shape)
+        c["ocr_input"] = mask_non_characters(c["gray"], rows)
+        c["ocr_lines"] = []
+        engine = "-"
+        raw1, raw2 = "", ""
+        conf1, conf2 = 0.0, 0.0
+        vehicle = "motorbike"
+        layout = "two_rows"
+        warning = None
+
+        if is_long and rows:
+            layout = "one_row"
+            vehicle = "car"
+            warning = CAR_LONG_WARNING
+            row = rows[0]
+            c["ocr_lines"] = [compose_line(c["gray"], row)]
+            if ocr in ("auto", "cnn") and self.chars.available:
+                texts, conf = self.chars.read_rows(c["gray"], [row])
+                if texts is not None:
+                    raw1, engine = texts[0], "CNN"
+                    conf1 = conf2 = conf
+            if engine == "-":
+                raw1, conf1 = self.ocr.read_line(c["ocr_lines"][0], LINE1_ALLOW)
+                conf2 = conf1
+                engine = "EasyOCR"
+            series, number = split_car_long(raw1)
+            line1 = normalize_car_series(series)
+            line2 = normalize_line2(number)
+            text = f"{line1}-{line2}"
+            valid = is_valid_car(line1, line2)
+        else:
+            use_cnn = (ocr in ("auto", "cnn") and found and self.chars.available and len(rows) == 2
+                       and 3 <= len(rows[0]) <= 5 and 4 <= len(rows[1]) <= 6)
+            if use_cnn:
+                texts, conf = self.chars.read_rows(c["gray"], rows)
+                if texts is not None:
+                    raw1, raw2 = texts
+                    conf1 = conf2 = conf
+                    engine = "CNN"
+                    c["ocr_lines"] = [compose_line(c["gray"], r) for r in rows]
+            if found and engine == "-":
+                engine = "EasyOCR"
+                if len(rows) == 2:
+                    lines = [compose_line(c["gray"], r) for r in rows]
+                else:
+                    src = c["ocr_input"]
+                    lines = [src[y0:y1, x0:x1] for (y0, y1, x0, x1) in regions]
+                c["ocr_lines"] = lines
+                raw1, conf1 = self.ocr.read_line(lines[0], LINE1_ALLOW) if len(lines) > 0 else ("", 0.0)
+                raw2, conf2 = self.ocr.read_line(lines[1], LINE2_ALLOW) if len(lines) > 1 else ("", 0.0)
+                if raw1 and not raw2:
+                    raw1, raw2 = split_single_line(raw1)
+
+            is_car_square = (found and len(rows) == 2 and looks_like_car_series(raw1)
+                             and _row_is_complete(rows[0], rows[1]))
+            if is_car_square:
+                vehicle = "car"
+                warning = CAR_SQUARE_WARNING
+                line1, line2 = normalize_car_series(raw1), normalize_line2(raw2)
+                text, valid = f"{line1}-{line2}", is_valid_car(line1, line2)
+            else:
+                line1, line2 = normalize_line1(raw1), normalize_line2(raw2)
+                text, valid = f"{line1} {line2}".strip(), is_valid(line1, line2)
+
+        strip = character_strip(c["binary"], rows)
+        return {
+            "found": found,
+            "text": text,
+            "line1": line1,
+            "line2": line2,
+            "province": get_province(line1 or text),
+            "raw": [raw1, raw2],
+            "confidence": round((conf1 + conf2) / 2 if found else 0.0, 3),
+            "valid": valid,
+            "num_chars": n_chars,
+            "source": c["source"],
+            "ocr_engine": engine,
+            "vehicle": vehicle,
+            "layout": layout,
+            "warning": warning,
+            "bbox": [int(v) for v in c["bbox"]],
+            "quad": c["quad"].astype(float).tolist(),
+            "plate_image": to_data_uri(c["plate"]),
+            "chars_image": to_data_uri(strip, ".png") if strip is not None else None,
+            "cand": c,
+            "regions": regions,
+        }
+
     def run(self, img_bgr, with_steps=True, ocr="auto"):
-        """ocr: 'auto' (CNN ký tự nếu có mô hình, ngược lại EasyOCR) | 'cnn' | 'easyocr'."""
+        """Nhận dạng biển số (hỗ trợ cả ảnh đơn biển và ảnh đa biển số)."""
         t0 = time.perf_counter()
         img = resize_to_width(img_bgr, WORK_WIDTH)
         pre = preprocess(img)
 
         # --- Định vị + kiểm chứng ứng viên ---------------------------------
         cands = [self._evaluate(img, c) for c in find_plate_candidates(img, pre)]
-        best = max(cands, key=lambda c: c["score"])
-
-        # Biển ô tô dài 1 dòng: nhánh xe máy không bắt được (tỉ lệ ~4.7) -> tìm riêng
         long_cands = [self._evaluate_long(img, c) for c in find_long_plate_candidates(img, pre)]
-        long_ok = [c for c in long_cands if c["score"] > 0]
-        is_long = bool(long_ok)
-        if is_long:
-            best = max(long_ok, key=lambda c: c["score"])
-        n_chars = sum(len(r) for r in best["rows"])
-        found = n_chars >= 4
+        for lc in long_cands:
+            lc["is_long"] = True
+
+        all_cands = cands + long_cands
         t_detect = time.perf_counter()
 
-        # --- Nhận dạng ------------------------------------------------------
-        raw1 = raw2 = ""
-        conf1 = conf2 = 0.0
-        regions = line_regions(best["rows"], best["gray"].shape)
-        best["ocr_input"] = mask_non_characters(best["gray"], best["rows"])
-        best["ocr_lines"] = []
-        engine = "-"
-        rows = best["rows"]
+        # Lọc ứng viên đạt chuẩn (Multi-plate ALPR)
+        all_cands.sort(key=lambda c: c["score"], reverse=True)
+        from .utils import box_iou
+        valid_cands = []
+        for c in all_cands:
+            n_c = sum(len(r) for r in c.get("rows", []))
+            if c["score"] >= 1.0 and n_c >= 4 and c["source"] != "full":
+                if all(box_iou(c["bbox"], v["bbox"]) < 0.35 for v in valid_cands):
+                    valid_cands.append(c)
 
-        if is_long:
-            return self._finish_long(img, pre, cands + long_cands, best, regions, ocr, t0, t_detect, with_steps)
+        if not valid_cands:
+            best_cand = max(all_cands, key=lambda c: c["score"])
+            valid_cands = [best_cand]
 
-        # CNN chỉ dùng khi phân đoạn ra đúng cấu trúc biển 2 dòng: 3-5 và 4-5 ký tự
-        use_cnn = (ocr in ("auto", "cnn") and found and self.chars.available and len(rows) == 2
-                   and 3 <= len(rows[0]) <= 5 and 4 <= len(rows[1]) <= 5)
-        if use_cnn:
-            texts, conf = self.chars.read_rows(best["gray"], rows)
-            if texts is not None:
-                raw1, raw2 = texts
-                conf1 = conf2 = conf
-                engine = "CNN"
-                best["ocr_lines"] = [compose_line(best["gray"], r) for r in rows]
-        if found and engine == "-":
-            engine = "EasyOCR"
-            if len(best["rows"]) == 2:
-                # Ghép lại ký tự đã phân đoạn của từng dòng (cách đều, bỏ dấu '-' '.')
-                lines = [compose_line(best["gray"], r) for r in best["rows"]]
-            else:
-                src = best["ocr_input"]
-                lines = [src[y0:y1, x0:x1] for (y0, y1, x0, x1) in regions]
-            best["ocr_lines"] = lines
-            raw1, conf1 = self.ocr.read_line(lines[0], LINE1_ALLOW)
-            raw2, conf2 = self.ocr.read_line(lines[1], LINE2_ALLOW)
-            if raw1 and not raw2:
-                raw1, raw2 = split_single_line(raw1)
+        # Nhận dạng từng biển số và lọc triệt để nhiễu rác (như chữ vụn E 21, bóng đèn)
+        plates = []
+        for c in valid_cands:
+            p_res = self._recognize_single_cand(c, ocr=ocr)
+            if not p_res["found"] or not p_res["text"]:
+                continue
+            clean_alnum = [ch for ch in p_res["text"] if ch.isalnum()]
+            # Biển số xe VN luôn có tối thiểu 6-10 ký tự; loại bỏ các mảnh rác quá ngắn hoặc conf quá thấp
+            if len(clean_alnum) < 6 or p_res["confidence"] < 0.18:
+                continue
+            plates.append(p_res)
 
-        # Biển 2 dòng mà dòng trên chỉ có "2 số + chữ cái" (vd. 51G) -> biển ô tô vuông
-        is_car_square = (found and len(rows) == 2 and looks_like_car_series(raw1)
-                         and _row_is_complete(rows[0], rows[1]))
-        if is_car_square:
-            line1, line2 = normalize_car_series(raw1), normalize_line2(raw2)
-            text, valid = f"{line1}-{line2}", is_valid_car(line1, line2)
-        else:
-            line1, line2 = normalize_line1(raw1), normalize_line2(raw2)
-            text, valid = f"{line1} {line2}".strip(), is_valid(line1, line2)
+        # Sắp xếp biển số từ trái sang phải theo x
+        plates.sort(key=lambda p: p["bbox"][0])
+        for idx, p in enumerate(plates):
+            p["index"] = idx + 1
+
         t_end = time.perf_counter()
 
-        result = self._result(
-            found=found, text=text, line1=line1, line2=line2, raw=[raw1, raw2],
-            confidence=(conf1 + conf2) / 2 if found else 0.0, valid=valid, n_chars=n_chars,
-            n_cands=len(cands), best=best, engine=engine, times=(t0, t_detect, t_end),
-            vehicle="car" if is_car_square else "motorbike", layout="two_rows",
-            warning=CAR_SQUARE_WARNING if is_car_square else None)
-        if with_steps:
-            result.update(self._visualize(img, pre, cands, best, regions, found))
-        return result
+        # Biển đại diện chính (ưu tiên biển hợp lệ, conf cao nhất)
+        best = max(plates, key=lambda p: (p["valid"], p["confidence"], p["cand"]["score"])) if plates else self._recognize_single_cand(valid_cands[0], ocr=ocr)
+        found = bool(plates)
 
-    def _finish_long(self, img, pre, cands, best, regions, ocr, t0, t_detect, with_steps):
-        """Đọc biển ô tô dài 1 dòng (vd. 51G-123.45)."""
-        row = best["rows"][0]
-        raw, conf, engine = "", 0.0, "-"
-        best["ocr_lines"] = [compose_line(best["gray"], row)]
-        if ocr in ("auto", "cnn") and self.chars.available:
-            texts, conf = self.chars.read_rows(best["gray"], [row])
-            if texts is not None:
-                raw, engine = texts[0], "CNN"
-        if engine == "-":
-            raw, conf = self.ocr.read_line(best["ocr_lines"][0], LINE1_ALLOW)
-            engine = "EasyOCR"
-        series, number = split_car_long(raw)
-        series, number = normalize_car_series(series), normalize_line2(number)
-        t_end = time.perf_counter()
-        result = self._result(
-            found=True, text=f"{series}-{number}", line1=series, line2=number, raw=[raw],
-            confidence=conf, valid=is_valid_car(series, number), n_chars=len(row),
-            n_cands=len(cands), best=best, engine=engine, times=(t0, t_detect, t_end),
-            vehicle="car", layout="one_row", warning=CAR_LONG_WARNING)
-        if with_steps:
-            result.update(self._visualize(img, pre, cands, best, regions, True))
-        return result
+        out_plates = [
+            {
+                "index": p.get("index", i + 1),
+                "text": p["text"],
+                "line1": p["line1"],
+                "line2": p["line2"],
+                "province": p.get("province", get_province(p.get("line1", p.get("text")))),
+                "raw": p["raw"],
+                "confidence": p["confidence"],
+                "valid": p["valid"],
+                "num_chars": p["num_chars"],
+                "vehicle": p["vehicle"],
+                "layout": p["layout"],
+                "ocr_engine": p["ocr_engine"],
+                "warning": p["warning"],
+                "bbox": p["bbox"],
+                "plate_image": p["plate_image"],
+                "chars_image": p["chars_image"],
+            }
+            for i, p in enumerate(plates)
+        ]
 
-    def _result(self, *, found, text, line1, line2, raw, confidence, valid, n_chars, n_cands, best,
-                engine, times, vehicle, layout, warning):
-        t0, t_detect, t_end = times
-        return {
+        result = {
             "found": found,
-            "text": text,
-            "line1": line1,
-            "line2": line2,
-            "raw": raw,
-            "confidence": round(confidence, 3),
-            "valid": valid,
-            "num_chars": n_chars,
-            "num_candidates": n_cands,
+            "plate_count": len(plates),
+            "text": " · ".join(p["text"] for p in plates) if len(plates) > 1 else best["text"],
+            "line1": best["line1"],
+            "line2": best["line2"],
+            "province": best.get("province", get_province(best.get("line1", best.get("text")))),
+            "raw": best["raw"],
+            "confidence": best["confidence"],
+            "valid": best["valid"],
+            "num_chars": best["num_chars"],
+            "num_candidates": len(all_cands),
             "source": best["source"],
-            "ocr_engine": engine,
-            "vehicle": vehicle,      # "motorbike" | "car"
-            "layout": layout,        # "two_rows" | "one_row"
-            "warning": warning,      # cảnh báo hiển thị cho người dùng (None nếu là biển xe máy)
+            "ocr_engine": best["ocr_engine"],
+            "vehicle": best["vehicle"],
+            "layout": best["layout"],
+            "warning": best["warning"],
             "time_ms": {
                 "detect_segment": round((t_detect - t0) * 1000, 1),
                 "ocr": round((t_end - t_detect) * 1000, 1),
                 "total": round((t_end - t0) * 1000, 1),
             },
+            "plates": out_plates,
             "ocr_error": self.ocr.error,
         }
 
+        if with_steps:
+            vis = self._visualize_multi(img, pre, all_cands, plates, best)
+            result.update(vis)
+        return result
+
     # ------------------------------------------------------------------
     @staticmethod
-    def _visualize(img, pre, cands, best, regions, found):
-        # Tất cả ứng viên (vàng) + ứng viên được chọn (xanh lá)
+    def _visualize_multi(img, pre, cands, plates, best_plate):
+        # Tất cả ứng viên (vàng)
         cand_vis = img.copy()
         for c in cands:
             if c["source"] != "full":
                 cv2.polylines(cand_vis, [c["quad"].astype(np.int32)], True, (0, 220, 255), 1)
 
+        # Ảnh phát hiện biển số (vẽ TẤT CẢ các biển tìm được màu xanh lá kèm nhãn)
         detected = img.copy()
-        if found:
-            cv2.polylines(detected, [best["quad"].astype(np.int32)], True, (0, 255, 0), 3)
+        for idx, p in enumerate(plates):
+            quad = np.array(p["quad"], dtype=np.int32)
+            cv2.polylines(detected, [quad], True, (0, 255, 0), 3)
+
+            bx, by, bw, bh = p["bbox"]
+            label = f"#{p.get('index', idx+1)}: {p['text']}" if len(plates) > 1 else p["text"]
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            scale = 0.55
+            thick = 2
+            (tw, th), baseline = cv2.getTextSize(label, font, scale, thick)
+            ty = max(by - 6, th + 4)
+            cv2.rectangle(detected, (bx, ty - th - 4), (bx + tw + 6, ty + baseline), (0, 200, 0), -1)
+            cv2.putText(detected, label, (bx + 3, ty - 2), font, scale, (0, 0, 0), thick, cv2.LINE_AA)
+
+        best = best_plate["cand"]
+        regions = best_plate["regions"]
+        colors = [(0, 0, 255), (255, 128, 0)]
 
         seg_vis = cv2.cvtColor(best["binary"], cv2.COLOR_GRAY2BGR)
-        colors = [(0, 0, 255), (255, 128, 0)]
         for i, row in enumerate(best["rows"]):
             for (x, y, w, h) in row:
                 cv2.rectangle(seg_vis, (x, y), (x + w, y + h), colors[i % 2], 2)
@@ -228,9 +325,6 @@ class LicensePlateRecognizer:
         for i, (y0, y1, x0, x1) in enumerate(regions):
             cv2.rectangle(line_vis, (x0, y0), (x1 - 1, y1 - 1), colors[i % 2], 2)
 
-        strip = character_strip(best["binary"], best["rows"])
-
-        # Các dòng thực sự đưa vào OCR, xếp chồng lên nhau
         ocr_lines = [ln for ln in best.get("ocr_lines", []) if ln is not None and ln.size]
         if ocr_lines:
             lw = max(ln.shape[1] for ln in ocr_lines)
@@ -240,6 +334,8 @@ class LicensePlateRecognizer:
         else:
             ocr_vis = line_vis
 
+        strip = character_strip(best["binary"], best["rows"])
+
         steps = [
             ("Ảnh gốc", f"Chuẩn hoá chiều rộng {WORK_WIDTH}px", img),
             ("Ảnh xám", "Chuyển BGR → Grayscale", pre["gray"]),
@@ -247,24 +343,19 @@ class LicensePlateRecognizer:
             ("Lọc song phương", "Bilateral filter: khử nhiễu, giữ biên", pre["blur"]),
             ("Biên Canny", "Phát hiện biên (ngưỡng 30 / 200)", pre["edges"]),
             ("Phép đóng", "Morphology close nối biên đứt gãy", pre["closed"]),
-            ("Vùng sáng (Otsu)", "Ngưỡng Otsu + phép mở tìm nền biển sáng", pre["bright"]),
+            ("Vùng sáng", "Ngưỡng thích nghi + Otsu tìm nền biển số sáng", pre.get("adapt", pre["bright"])),
             ("Ứng viên", f"{len(cands) - 1} contour có hình dạng giống biển số", cand_vis),
-            ("Biển số được chọn",
-             "Biển ô tô dài 1 dòng (tỉ lệ ~4.7)" if best["source"] == "long"
-             else f"Điểm cao nhất (nguồn: {best['source']})", detected),
-            ("Nắn phối cảnh", "Perspective transform → "
-             f"{best['plate'].shape[1]}×{best['plate'].shape[0]}", best["plate"]),
-            ("Nhị phân hoá", "Adaptive threshold (Gaussian)" + (" – đã đảo nền tối" if best["inverted"] else ""),
-             best["binary"]),
-            ("Phân đoạn ký tự", "Connected components + lọc kích thước, "
-             + ("1 dòng (biển ô tô dài)" if best["source"] == "long" else "tách 2 dòng"), seg_vis),
+            ("Biển số phát hiện", f"Tìm thấy {len(plates)} biển số hợp lệ trên ảnh", detected),
+            ("Nắn phối cảnh", f"Perspective transform biển chính → {best['plate'].shape[1]}×{best['plate'].shape[0]}", best["plate"]),
+            ("Nhị phân hoá", "Adaptive threshold (Gaussian)" + (" – đã đảo nền tối" if best["inverted"] else ""), best["binary"]),
+            ("Phân đoạn ký tự", f"Tách {len(best['rows'])} dòng ký tự thành phần liên thông", seg_vis),
             ("Lọc ký tự", "Xoá dấu '-', '.', ốc vít, khung viền… chỉ giữ vùng ký tự", line_vis),
             ("Ảnh đưa vào OCR", "Ghép lại ký tự từng dòng, cách đều nhau", ocr_vis),
         ]
-        out = {
+
+        return {
             "steps": [{"title": t, "desc": d, "image": to_data_uri(im)} for t, d, im in steps],
             "detected_image": to_data_uri(detected),
-            "plate_image": to_data_uri(best["plate"]),
-            "chars_image": to_data_uri(strip, ".png") if strip is not None else None,
+            "plate_image": best_plate["plate_image"],
+            "chars_image": best_plate["chars_image"],
         }
-        return out

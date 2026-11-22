@@ -38,16 +38,19 @@ def resize_to_width(img, width):
 
 
 def order_points(pts):
-    """Sắp xếp 4 đỉnh theo thứ tự: trên-trái, trên-phải, dưới-phải, dưới-trái."""
+    """Sắp xếp 4 đỉnh theo thứ tự: trên-trái, trên-phải, dưới-phải, dưới-trái (chuẩn hình học)."""
     pts = np.asarray(pts, dtype="float32").reshape(4, 2)
-    rect = np.zeros((4, 2), dtype="float32")
-    s = pts.sum(axis=1)
-    d = np.diff(pts, axis=1).ravel()  # y - x
-    rect[0] = pts[np.argmin(s)]
-    rect[2] = pts[np.argmax(s)]
-    rect[1] = pts[np.argmin(d)]
-    rect[3] = pts[np.argmax(d)]
-    return rect
+    # Sắp xếp theo trục y tăng dần (2 điểm trên, 2 điểm dưới)
+    y_sorted = pts[np.argsort(pts[:, 1])]
+    top_two = y_sorted[:2]
+    bottom_two = y_sorted[2:]
+
+    # Điểm có x nhỏ hơn là left, lớn hơn là right
+    tl = top_two[np.argmin(top_two[:, 0])]
+    tr = top_two[np.argmax(top_two[:, 0])]
+    br = bottom_two[np.argmax(bottom_two[:, 0])]
+    bl = bottom_two[np.argmin(bottom_two[:, 0])]
+    return np.array([tl, tr, br, bl], dtype="float32")
 
 
 def quad_size(quad):

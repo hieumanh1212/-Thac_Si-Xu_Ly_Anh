@@ -181,60 +181,142 @@
   $("btnRecognize").addEventListener("click", recognize);
 
   // ================= Hiển thị kết quả =================
-  function render(d) {
-    lastResult = d;
-    $("emptyState").hidden = true;
-    $("result").hidden = false;
-    // Kích hoạt lại animation
-    const r = $("result"); r.style.animation = "none"; void r.offsetWidth; r.style.animation = "";
-    const p = $("plate"); p.style.animation = "none"; void p.offsetWidth; p.style.animation = "";
-
-    const isCar = d.vehicle === "car";
-    const oneRow = d.layout === "one_row";
-    // Biển ô tô dài: vẽ 1 dòng "51G-123.45"; biển 2 dòng (xe máy / ô tô vuông): 2 dòng
-    $("plateLine1").textContent = !d.found ? "--" : oneRow ? d.text : d.line1 || "?";
-    $("plateLine2").textContent = d.found ? d.line2 || "?" : "--";
-    $("plateLine2").hidden = oneRow;
-    p.classList.toggle("long", oneRow);
-    p.classList.toggle("invalid", !d.valid);
+  function selectPlate(p, d) {
+    const isCar = p.vehicle === "car";
+    const oneRow = p.layout === "one_row";
+    if ($("plateLine1")) $("plateLine1").textContent = !p.text ? "--" : oneRow ? p.text : p.line1 || "?";
+    const line2 = $("plateLine2");
+    if (line2) {
+      line2.textContent = p.text ? p.line2 || "?" : "--";
+      line2.hidden = oneRow;
+    }
+    const pl = $("plate");
+    if (pl) {
+      pl.classList.toggle("long", oneRow);
+      pl.classList.toggle("invalid", !p.valid);
+    }
 
     const vb = $("validBadge");
-    vb.className = "pill " + (isCar ? "car" : d.valid ? "valid" : "invalid");
-    vb.innerHTML = `<i class="dot"></i>${
-      isCar ? (oneRow ? "Biển ô tô" : "Có thể là biển ô tô")
-      : d.valid ? "Đúng định dạng biển số xe máy"
-      : d.found ? "Chưa khớp định dạng" : "Không tìm thấy biển số"}`;
+    if (vb) {
+      vb.className = "pill " + (isCar ? "car" : p.valid ? "valid" : "invalid");
+      vb.innerHTML = `<i class="dot"></i>${
+        isCar ? (oneRow ? "Biển ô tô" : "Có thể là biển ô tô")
+        : p.valid ? "Đúng định dạng biển số xe máy"
+        : p.text ? "Chưa khớp định dạng" : "Không tìm thấy biển số"}`;
+    }
 
-    $("warning").hidden = !d.warning;
-    $("warningText").textContent = d.warning || "";
+    const prov = p.province || d.province || "Chưa xác định";
+    const pb = $("provinceBadge");
+    const pt = $("provinceText");
+    if (pb && pt) {
+      pb.hidden = !p.text;
+      pt.textContent = prov;
+    }
+    if ($("sProvince")) $("sProvince").textContent = prov;
 
-    const conf = d.found ? d.confidence * 100 : 0;
-    animateNumber($("confVal"), conf);
+    const warnEl = $("warning");
+    if (warnEl) {
+      warnEl.hidden = !p.warning;
+      if ($("warningText")) $("warningText").textContent = p.warning || "";
+    }
+
+    const conf = p.confidence ? p.confidence * 100 : 0;
+    if ($("confVal")) animateNumber($("confVal"), conf);
     const ring = $("ringFg");
-    ring.style.strokeDashoffset = RING_LEN * (1 - conf / 100);
-    ring.style.stroke = conf >= 80 ? "var(--ok)" : conf >= 50 ? "var(--warn)" : "var(--err)";
+    if (ring) {
+      ring.style.strokeDashoffset = RING_LEN * (1 - conf / 100);
+      ring.style.stroke = conf >= 80 ? "var(--ok)" : conf >= 50 ? "var(--warn)" : "var(--err)";
+    }
 
-    $("sTime").textContent = `${Math.round(d.time_ms.total)} ms`;
-    $("sChars").textContent = d.num_chars;
-    $("sEngine").textContent = d.ocr_engine === "CNN" ? "CNN (font biển VN)" : d.ocr_engine;
-    $("sEngine").title = d.ocr_engine === "CNN"
-      ? "Mạng CNN train riêng cho ký tự biển số Việt Nam"
-      : "EasyOCR (dùng khi không tách đủ 2 dòng ký tự)";
-    $("sRaw").textContent = d.raw.filter(Boolean).join(" · ") || "–";
+    if ($("sChars")) $("sChars").textContent = p.num_chars || "–";
+    if ($("sEngine")) $("sEngine").textContent = p.ocr_engine === "CNN" ? "CNN (font biển VN)" : p.ocr_engine || "–";
+    if ($("sRaw")) $("sRaw").textContent = (p.raw || []).filter(Boolean).join(" · ") || "–";
 
-    const total = d.time_ms.detect_segment + d.time_ms.ocr || 1;
-    $("tDetect").style.width = (d.time_ms.detect_segment / total) * 100 + "%";
-    $("tOcr").style.width = (d.time_ms.ocr / total) * 100 + "%";
-    $("tDetectMs").textContent = `${Math.round(d.time_ms.detect_segment)} ms`;
-    $("tOcrMs").textContent = `${Math.round(d.time_ms.ocr)} ms`;
+    if (p.plate_image && $("imgPlate")) $("imgPlate").src = p.plate_image;
+    const charsImg = $("imgChars");
+    if (charsImg) {
+      const charsFig = charsImg.closest("figure");
+      if (charsFig) charsFig.hidden = !p.chars_image;
+      if (p.chars_image) charsImg.src = p.chars_image;
+    }
+  }
 
-    $("imgDetected").src = d.detected_image;
-    $("imgPlate").src = d.plate_image;
-    const chars = $("imgChars").closest("figure");
-    chars.hidden = !d.chars_image;
-    if (d.chars_image) $("imgChars").src = d.chars_image;
+  function render(d) {
+    lastResult = d;
+    if ($("emptyState")) $("emptyState").hidden = true;
+    const r = $("result");
+    if (r) {
+      r.hidden = false;
+      r.style.animation = "none"; void r.offsetWidth; r.style.animation = "";
+    }
+    const p = $("plate");
+    if (p) {
+      p.style.animation = "none"; void p.offsetWidth; p.style.animation = "";
+    }
 
-    $("btnCopy").hidden = !(d.found && d.text);
+    // Xử lý giao diện khi phát hiện nhiều biển số
+    const plates = d.plates || [];
+    let multiBox = $("multiPlatesBox");
+    let multiList = $("multiPlatesList");
+
+    // Tự động tạo phần tử nếu DOM cũ chưa có (tránh lỗi cache trình duyệt)
+    if (!multiBox && plates.length > 1 && r) {
+      multiBox = document.createElement("div");
+      multiBox.id = "multiPlatesBox";
+      multiBox.className = "multi-plates-box";
+      multiBox.innerHTML = `
+        <div class="multi-plates-header">
+          <span class="multi-badge"><i class="dot"></i><span id="multiPlatesCount">Tìm thấy ${plates.length} biển số</span></span>
+          <small class="muted">Bấm vào từng biển để xem chi tiết bên dưới</small>
+        </div>
+        <div id="multiPlatesList" class="multi-plates-list"></div>
+      `;
+      r.insertBefore(multiBox, r.firstChild);
+      multiList = $("multiPlatesList");
+    }
+
+    if (multiBox) {
+      if (plates.length > 1) {
+        multiBox.hidden = false;
+        if ($("multiPlatesCount")) $("multiPlatesCount").textContent = `Tìm thấy ${plates.length} biển số`;
+        if (multiList) {
+          multiList.innerHTML = "";
+          plates.forEach((plate, idx) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "multi-plate-pill" + (idx === 0 ? " active" : "");
+            const provTag = plate.province && plate.province !== "Chưa xác định" ? `<span class="pill-prov">${plate.province}</span>` : "";
+            btn.innerHTML = `<span class="pill-tag">#${plate.index || idx + 1}</span><b>${plate.text}</b>${provTag}<span class="pill-tag">${Math.round(plate.confidence * 100)}%</span>`;
+            btn.addEventListener("click", () => {
+              multiList.querySelectorAll(".multi-plate-pill").forEach((b) => b.classList.remove("active"));
+              btn.classList.add("active");
+              selectPlate(plate, d);
+            });
+            multiList.appendChild(btn);
+          });
+        }
+      } else {
+        multiBox.hidden = true;
+      }
+    }
+
+    // Hiển thị biển số mặc định
+    const activePlate = plates.length ? plates[0] : d;
+    selectPlate(activePlate, d);
+
+    if (d.time_ms) {
+      if ($("sTime")) $("sTime").textContent = `${Math.round(d.time_ms.total)} ms`;
+      const total = d.time_ms.detect_segment + d.time_ms.ocr || 1;
+      if ($("tDetect")) $("tDetect").style.width = (d.time_ms.detect_segment / total) * 100 + "%";
+      if ($("tOcr")) $("tOcr").style.width = (d.time_ms.ocr / total) * 100 + "%";
+      if ($("tDetectMs")) $("tDetectMs").textContent = `${Math.round(d.time_ms.detect_segment)} ms`;
+      if ($("tOcrMs")) $("tOcrMs").textContent = `${Math.round(d.time_ms.ocr)} ms`;
+    }
+
+    if ($("imgDetected") && d.detected_image) $("imgDetected").src = d.detected_image;
+
+    const btnCopy = $("btnCopy");
+    if (btnCopy) btnCopy.hidden = !(d.found && d.text);
     renderSteps(d.steps);
   }
 
@@ -261,7 +343,7 @@
   // ================= Pipeline viewer =================
   function renderSteps(list) {
     steps = list || [];
-    $("pipeline").hidden = !steps.length;
+    if ($("pipeline")) $("pipeline").hidden = !steps.length;
     const thumbs = $("thumbs");
     thumbs.innerHTML = "";
     steps.forEach((s, i) => {
@@ -306,7 +388,7 @@
     renderHistory();
   }
   function renderHistory() {
-    $("historyBox").hidden = !history.length;
+    if ($("historyBox")) $("historyBox").hidden = !history.length;
     const box = $("historyList");
     box.innerHTML = "";
     history.forEach((h) => {
@@ -317,8 +399,9 @@
       b.querySelector("img").src = h.plate_image;
       b.querySelector(".h-text").textContent = h.found ? h.text || "?" : "Không tìm thấy";
       b.querySelector(".d").style.background = h.valid ? "var(--ok)" : "var(--warn)";
+      const provStr = h.province && h.province !== "Chưa xác định" ? `${h.province} · ` : "";
       b.querySelector(".h-meta span").textContent =
-        `${h.vehicle === "car" ? "Ô tô · " : ""}${Math.round(h.time_ms.total)} ms · ${(h.confidence * 100).toFixed(0)}%`;
+        `${h.vehicle === "car" ? "Ô tô · " : ""}${provStr}${Math.round(h.time_ms.total)} ms · ${(h.confidence * 100).toFixed(0)}%`;
       if (h.vehicle === "car") b.querySelector(".d").style.background = "var(--warn)";
       b.addEventListener("click", () => { render(h); window.scrollTo({ top: 0, behavior: "smooth" }); });
       box.appendChild(b);

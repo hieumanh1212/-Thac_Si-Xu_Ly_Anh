@@ -10,10 +10,10 @@ import numpy as np
 
 from .utils import box_iou, order_points, quad_size
 
-# Tỉ lệ rộng / cao chấp nhận được của biển số xe máy (chuẩn ~1.36)
-MIN_ASPECT, MAX_ASPECT = 0.9, 2.0
-MIN_AREA_RATIO, MAX_AREA_RATIO = 0.002, 0.85
-MIN_FILL = 0.55  # diện tích contour / diện tích hình chữ nhật bao nhỏ nhất
+# Tỉ lệ rộng / cao chấp nhận được của biển số xe máy (chuẩn ~1.36, cho phép nới lỏng phối cảnh)
+MIN_ASPECT, MAX_ASPECT = 0.75, 2.2
+MIN_AREA_RATIO, MAX_AREA_RATIO = 0.0015, 0.85
+MIN_FILL = 0.45  # diện tích contour / diện tích hình chữ nhật bao nhỏ nhất
 
 
 def _candidates_from_mask(mask, source, aspect_range=(MIN_ASPECT, MAX_ASPECT)):
@@ -62,16 +62,23 @@ def _candidates_from_mask(mask, source, aspect_range=(MIN_ASPECT, MAX_ASPECT)):
     return out
 
 
-def find_plate_candidates(img_bgr, pre, max_candidates=25):
+def find_plate_candidates(img_bgr, pre, max_candidates=35):
     """Trả về danh sách ứng viên vùng biển số (đã loại trùng lặp)."""
     h, w = img_bgr.shape[:2]
-    cands = _candidates_from_mask(pre["closed"], "edge") + _candidates_from_mask(pre["bright"], "bright")
+    cands = (
+        _candidates_from_mask(pre["closed"], "edge")
+        + _candidates_from_mask(pre["bright"], "bright")
+    )
+    if "adapt" in pre:
+        cands += _candidates_from_mask(pre["adapt"], "adapt")
+    if "edges" in pre:
+        cands += _candidates_from_mask(pre["edges"], "edge_raw")
 
     # Loại trùng: ưu tiên ứng viên có độ đầy (fill) cao hơn
     cands.sort(key=lambda c: c["fill"], reverse=True)
     unique = []
     for c in cands:
-        if all(box_iou(c["bbox"], u["bbox"]) < 0.85 for u in unique):
+        if all(box_iou(c["bbox"], u["bbox"]) < 0.75 for u in unique):
             unique.append(c)
     unique.sort(key=lambda c: c["area"], reverse=True)
     unique = unique[:max_candidates]
