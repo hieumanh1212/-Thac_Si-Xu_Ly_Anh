@@ -356,6 +356,9 @@ class LicensePlateRecognizer:
         return {
             "steps": [{"title": t, "desc": d, "image": to_data_uri(im)} for t, d, im in steps],
             "detected_image": to_data_uri(detected),
+            # Ảnh gốc CHƯA vẽ nhãn + kích thước: giao diện tự vẽ khung tương tác cho từng biển số
+            "scene_image": to_data_uri(img),
+            "image_size": [int(img.shape[1]), int(img.shape[0])],
             "plate_image": best_plate["plate_image"],
             "chars_image": best_plate["chars_image"],
         }

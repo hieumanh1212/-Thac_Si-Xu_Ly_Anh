@@ -241,83 +241,142 @@
     }
   }
 
+  function replayAnimation(el) {
+    el.style.animation = "none";
+    void el.offsetWidth;
+    el.style.animation = "";
+  }
+
   function render(d) {
     lastResult = d;
-    if ($("emptyState")) $("emptyState").hidden = true;
-    const r = $("result");
-    if (r) {
-      r.hidden = false;
-      r.style.animation = "none"; void r.offsetWidth; r.style.animation = "";
-    }
-    const p = $("plate");
-    if (p) {
-      p.style.animation = "none"; void p.offsetWidth; p.style.animation = "";
-    }
+    $("emptyState").hidden = true;
+    $("result").hidden = false;
+    replayAnimation($("result"));
+    replayAnimation($("plate"));
 
-    // Xử lý giao diện khi phát hiện nhiều biển số
     const plates = d.plates || [];
-    let multiBox = $("multiPlatesBox");
-    let multiList = $("multiPlatesList");
-
-    // Tự động tạo phần tử nếu DOM cũ chưa có (tránh lỗi cache trình duyệt)
-    if (!multiBox && plates.length > 1 && r) {
-      multiBox = document.createElement("div");
-      multiBox.id = "multiPlatesBox";
-      multiBox.className = "multi-plates-box";
-      multiBox.innerHTML = `
-        <div class="multi-plates-header">
-          <span class="multi-badge"><i class="dot"></i><span id="multiPlatesCount">Tìm thấy ${plates.length} biển số</span></span>
-          <small class="muted">Bấm vào từng biển để xem chi tiết bên dưới</small>
-        </div>
-        <div id="multiPlatesList" class="multi-plates-list"></div>
-      `;
-      r.insertBefore(multiBox, r.firstChild);
-      multiList = $("multiPlatesList");
+    renderScene(d);
+    if (plates.length > 1) {
+      // Mặc định chọn biển "chắc chắn" đầu tiên (nếu không có thì biển đầu tiên)
+      const idx = Math.max(plates.findIndex(isSure), 0);
+      activatePlate(plates[idx], d, idx);
+    } else {
+      selectPlate(plates[0] || d, d);
     }
 
-    if (multiBox) {
-      if (plates.length > 1) {
-        multiBox.hidden = false;
-        if ($("multiPlatesCount")) $("multiPlatesCount").textContent = `Tìm thấy ${plates.length} biển số`;
-        if (multiList) {
-          multiList.innerHTML = "";
-          plates.forEach((plate, idx) => {
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = "multi-plate-pill" + (idx === 0 ? " active" : "");
-            const provTag = plate.province && plate.province !== "Chưa xác định" ? `<span class="pill-prov">${plate.province}</span>` : "";
-            btn.innerHTML = `<span class="pill-tag">#${plate.index || idx + 1}</span><b>${plate.text}</b>${provTag}<span class="pill-tag">${Math.round(plate.confidence * 100)}%</span>`;
-            btn.addEventListener("click", () => {
-              multiList.querySelectorAll(".multi-plate-pill").forEach((b) => b.classList.remove("active"));
-              btn.classList.add("active");
-              selectPlate(plate, d);
-            });
-            multiList.appendChild(btn);
-          });
-        }
-      } else {
-        multiBox.hidden = true;
-      }
-    }
-
-    // Hiển thị biển số mặc định
-    const activePlate = plates.length ? plates[0] : d;
-    selectPlate(activePlate, d);
-
-    if (d.time_ms) {
-      if ($("sTime")) $("sTime").textContent = `${Math.round(d.time_ms.total)} ms`;
-      const total = d.time_ms.detect_segment + d.time_ms.ocr || 1;
-      if ($("tDetect")) $("tDetect").style.width = (d.time_ms.detect_segment / total) * 100 + "%";
-      if ($("tOcr")) $("tOcr").style.width = (d.time_ms.ocr / total) * 100 + "%";
-      if ($("tDetectMs")) $("tDetectMs").textContent = `${Math.round(d.time_ms.detect_segment)} ms`;
-      if ($("tOcrMs")) $("tOcrMs").textContent = `${Math.round(d.time_ms.ocr)} ms`;
-    }
-
-    if ($("imgDetected") && d.detected_image) $("imgDetected").src = d.detected_image;
-
-    const btnCopy = $("btnCopy");
-    if (btnCopy) btnCopy.hidden = !(d.found && d.text);
+    renderTiming(d.time_ms);
+    if (d.detected_image) $("imgDetected").src = d.detected_image;
+    $("btnCopy").hidden = !(d.found && d.text);
     renderSteps(d.steps);
+  }
+
+  function renderTiming(t) {
+    if (!t) return;
+    const total = t.detect_segment + t.ocr || 1;
+    $("sTime").textContent = `${Math.round(t.total)} ms`;
+    $("tDetect").style.width = (t.detect_segment / total) * 100 + "%";
+    $("tOcr").style.width = (t.ocr / total) * 100 + "%";
+    $("tDetectMs").textContent = `${Math.round(t.detect_segment)} ms`;
+    $("tOcrMs").textContent = `${Math.round(t.ocr)} ms`;
+  }
+
+  // ================= Nhiều biển số: ảnh + khung đánh số + thẻ liên kết =================
+  // "Chắc chắn" = đúng định dạng và độ tin cậy >= 60%; còn lại xếp vào "Cần kiểm tra"
+  const isSure = (p) => Boolean(p.valid) && p.confidence >= 0.6;
+
+  function renderScene(d) {
+    const plates = d.plates || [];
+    const multi = plates.length > 1;
+    $("scene").hidden = !multi;
+    $("scene").classList.remove("has-active");
+    $("result").classList.toggle("multi", multi);
+    if (!multi) return;
+    $("sceneImg").src = d.scene_image || d.detected_image;
+    $("sceneCount").textContent =
+      `Tìm thấy ${plates.length} biển số · ${plates.filter(isSure).length} chắc chắn`;
+    renderSceneBoxes(plates, d);
+    renderSceneCards(plates, d);
+  }
+
+  function renderSceneBoxes(plates, d) {
+    const [W, H] = d.image_size || [800, 600];
+    const layer = $("sceneBoxes");
+    layer.innerHTML = "";
+    plates.forEach((p, i) => {
+      const [x, y, w, h] = p.bbox;
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = "scene-box " + (isSure(p) ? "sure" : "unsure");
+      el.dataset.idx = i;
+      el.title = p.text;
+      Object.assign(el.style, {
+        left: `${(x / W) * 100}%`, top: `${(y / H) * 100}%`,
+        width: `${(w / W) * 100}%`, height: `${(h / H) * 100}%`,
+      });
+      el.innerHTML = `<span class="scene-num"></span>`;
+      el.firstChild.textContent = p.index || i + 1;
+      bindPlateEvents(el, p, d, i);
+      layer.appendChild(el);
+    });
+  }
+
+  function renderSceneCards(plates, d) {
+    const groups = { sure: [], unsure: [] };
+    plates.forEach((p, i) => groups[isSure(p) ? "sure" : "unsure"].push([p, i]));
+    fillCardGroup($("sceneSure"), "Chắc chắn", groups.sure, d);
+    fillCardGroup($("sceneUnsure"), "Cần kiểm tra", groups.unsure, d);
+  }
+
+  function fillCardGroup(box, title, items, d) {
+    box.innerHTML = "";
+    box.hidden = !items.length;
+    if (!items.length) return;
+    const h = document.createElement("h4");
+    h.className = "scene-group";
+    h.textContent = `${title} (${items.length})`;
+    box.appendChild(h);
+    items.forEach(([p, i]) => {
+      const card = plateCard(p, i);
+      bindPlateEvents(card, p, d, i);
+      box.appendChild(card);
+    });
+  }
+
+  function plateCard(p, i) {
+    const conf = Math.round((p.confidence || 0) * 100);
+    const hasProv = p.province && p.province !== "Chưa xác định";
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = "scene-card " + (isSure(p) ? "sure" : "unsure");
+    el.dataset.idx = i;
+    el.innerHTML = `<span class="scene-num"></span><img alt="">
+      <span class="sc-body"><b class="sc-text"></b><small class="sc-prov"></small>
+      <span class="sc-bar"><i></i></span></span><span class="sc-conf"></span>`;
+    el.querySelector(".scene-num").textContent = p.index || i + 1;
+    el.querySelector("img").src = p.plate_image;
+    el.querySelector(".sc-text").textContent = p.text;
+    el.querySelector(".sc-prov").textContent = hasProv ? p.province : "Không rõ tỉnh / thành";
+    el.querySelector(".sc-bar i").style.width = `${conf}%`;
+    el.querySelector(".sc-conf").textContent = `${conf}%`;
+    return el;
+  }
+
+  function bindPlateEvents(el, p, d, i) {
+    el.addEventListener("click", () => activatePlate(p, d, i));
+    el.addEventListener("mouseenter", () => setPlateHover(i, true));
+    el.addEventListener("mouseleave", () => setPlateHover(i, false));
+  }
+
+  // Khung trên ảnh và thẻ cùng chỉ số luôn sáng lên cùng nhau
+  function setPlateHover(i, on) {
+    document.querySelectorAll(`#scene [data-idx="${i}"]`).forEach((el) => el.classList.toggle("hover", on));
+  }
+
+  function activatePlate(p, d, i) {
+    document.querySelectorAll("#scene [data-idx]").forEach((el) =>
+      el.classList.toggle("active", el.dataset.idx === String(i)));
+    $("scene").classList.add("has-active");
+    selectPlate(p, d);
   }
 
   function animateNumber(el, to) {

@@ -137,13 +137,22 @@
       </div>
 
       <div id="result" hidden>
-        <!-- Danh sách đa biển số (khi ảnh có từ 2 biển số trở lên) -->
-        <div id="multiPlatesBox" class="multi-plates-box" hidden>
-          <div class="multi-plates-header">
-            <span class="multi-badge"><i class="dot"></i><span id="multiPlatesCount">Phát hiện nhiều biển số</span></span>
-            <small class="muted">Bấm vào từng biển để xem chi tiết bên dưới</small>
+        <!-- Ảnh có từ 2 biển số trở lên: ảnh làm trung tâm, khung đánh số liên kết với thẻ bên phải -->
+        <div id="scene" class="scene" hidden>
+          <div class="scene-head">
+            <span class="scene-count" id="sceneCount"></span>
+            <small class="muted">Bấm vào khung đánh số trên ảnh hoặc thẻ tương ứng để xem chi tiết</small>
           </div>
-          <div id="multiPlatesList" class="multi-plates-list"></div>
+          <div class="scene-body">
+            <div class="scene-stage">
+              <img id="sceneImg" alt="Ảnh với các biển số được đánh số">
+              <div id="sceneBoxes" class="scene-boxes"></div>
+            </div>
+            <div class="scene-list">
+              <div id="sceneSure"></div>
+              <div id="sceneUnsure"></div>
+            </div>
+          </div>
         </div>
 
         <div id="warning" class="warning" role="alert" hidden>
